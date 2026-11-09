@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Botty – chatbot with a brain</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#77756e;--me:#3b5bdb;--meText:#fff;--bot:#ecebe5;--line:#e0ded6;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--card:#1e1e1c;--text:#ecebe5;--muted:#8d8b83;--me:#5c7cfa;--bot:#2a2a27;--line:#33332f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141413;--card:#1e1e1c;--text:#ecebe5;--muted:#8d8b83;--me:#5c7cfa;--bot:#2a2a27;--line:#33332f;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center}
+.app{width:100%;max-width:560px;height:100%;display:flex;flex-direction:column;background:var(--card);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.av{width:34px;height:34px;border-radius:50%;background:var(--me);color:var(--meText);display:grid;place-items:center;font-weight:700}
+.ttl{flex:1;font-weight:600;line-height:1.2}
+.ttl small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+.ib{border:0;background:transparent;color:var(--muted);font-size:18px;padding:6px 8px;border-radius:8px;cursor:pointer}
+.ib:hover{background:var(--bot)}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);padding:18px;width:min(340px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog input{display:block;width:100%;margin:8px 0}
+dialog button{border:1px solid var(--line);background:var(--bot);color:var(--text);border-radius:99px;padding:8px 14px;font-size:14px;cursor:pointer;margin:4px 4px 0 0}
+dialog .lk{border:0;background:none;color:var(--muted);text-decoration:underline}
+#lmsg{min-height:20px;font-size:13px;color:var(--muted)}
+.mode{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:99px;padding:5px 6px;font-size:13px;max-width:104px}
+#log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth}
+.m{max-width:82%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word;animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.bot{background:var(--bot);align-self:flex-start;border-bottom-left-radius:4px}
+.me{background:var(--me);color:var(--meText);align-self:flex-end;border-bottom-right-radius:4px}
+.src{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
+.typing span{display:inline-block;width:6px;height:6px;margin:0 2px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-3px)}}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:0 14px 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:99px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chips button:hover{border-color:var(--me)}
+.helper{align-self:flex-start;max-width:88%;border:1.5px dashed var(--me);color:var(--muted);border-radius:12px;padding:8px 12px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+input{flex:1;min-width:0;font-size:16px;padding:10px 14px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--text);outline:none}
+input:focus{border-color:var(--me)}
+form button{border:0;background:var(--me);color:var(--meText);border-radius:99px;padding:0 18px;font-size:15px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="av" aria-hidden="true">B</div>
+  <div class="ttl">Botty<small id="brain">Rule-based bot + research helper Scout</small></div>
+  <button class="ib" id="acct" title="Log in" aria-label="Log in">👤</button>
+  <select class="mode" id="mode" aria-label="Mode"><option value="botty">🤖 Botty</option><option value="best">🧠 Best</option><option value="smart">✨ Smart</option></select>
+  <button class="ib" id="theme" title="Toggle dark mode" aria-label="Toggle dark mode">🌓</button>
+  <button class="ib" id="clear" title="Clear chat" aria-label="Clear chat">🗑</button>
+</header>
+<div id="log" role="log" aria-live="polite"></div>
+<div class="chips" id="chips"></div>
+<form id="f"><input id="in" placeholder="Say something…" autocomplete="off" aria-label="Message"><button>Send</button></form>
+</div>
+<dialog id="login">
+<b>Log in to save your brain</b>
+<input id="lem" type="email" placeholder="Email" autocomplete="email">
+<input id="lpw" type="password" placeholder="Password (6+ characters)" autocomplete="current-password">
+<div id="lmsg" role="status"></div>
+<button id="lin">Log in</button><button id="lup">Create account</button>
+<button id="lgo">Continue with Google</button><br>
+<button id="lfg" class="lk">Forgot password?</button><button id="lx" class="lk">Close</button>
+</dialog>
+<script>
+var log=document.getElementById("log"),inp=document.getElementById("in"),chipsEl=document.getElementById("chips");
+function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));if(window.cloudDirty&&/^botty-(name|notes|learned|brain|unlocked)$/.test(k))cloudDirty()}catch(e){}}
+var S={name:load("botty-name",null),teach:null,notes:load("botty-notes",[]),streak:0,last:null};
+var learned=load("botty-learned",[]),hist=load("botty-history",[]);
+var pick=function(a){return a[Math.floor(Math.random()*a.length)]};
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()}
+
+var jokes=["I told my computer I needed a break. Now it won’t stop sending me Kit-Kat ads.","Why do programmers prefer dark mode? Because light attracts bugs.","There are 10 kinds of people: those who understand binary and those who don’t.","My code has no bugs. It just develops random features.","Why did the developer go broke? He used up all his cache.","A SQL query walks into a bar, walks up to two tables and asks: “Can I join you?”"];
+var facts=["Honey never spoils. Edible honey has been found in ancient tombs.","Octopuses have three hearts.","A day on Venus is longer than its year.","Bananas are berries, but strawberries aren’t.","Sharks are older than trees.","Wombat droppings are cube-shaped.","Lightning is about five times hotter than the surface of the Sun."];
+var ball=["Yes, definitely.","It is certain.","Most likely.","Ask again later.","Cannot predict now.","Don’t count on it.","My sources say no.","Very doubtful."];
+
+function mood(w){return /sad|tired|bad|stressed|upset|bored|lonely|anxious/.test(w)?pick(["Sorry to hear that. Want a joke to help?","That’s rough. Want a fun fact or a joke?","I’m here. Want me to distract you with a joke?"]):"Nice!"}
+function greet(){var h=new Date().getHours();return h<5?"Up late":h<12?"Good morning":h<18?"Good afternoon":"Good evening"}
+
+// --- safe math: whitelist then evaluate
+function calc(t){
+  var m=t.match(/[\d(][\d\s+\-*\/().%^x×÷,]*[\d)]/);
+  if(!m)return null;
+  var e=m[0];
+  if(e.length<t.replace(/\s/g,'').length*0.4||!/[+\-*\/%^x×÷]/.test(e))return null;
+  e=e.replace(/,/g,'').replace(/[x×]/gi,'*').replace(/÷/g,'/').replace(/\^/g,'**');
+  if(!/^[\d\s+\-*\/().%]+$/.test(e))return null;
+  try{var r=Function('"use strict";return ('+e+')')();
+    if(typeof r!=='number'||!isFinite(r))return "nope, that doesn’t work out.";
+    return "That’s "+(+r.toFixed(6))+"."}catch(x){return null}
+}
+function convert(m){
+  var v=parseFloat(m[1]),u=m[2].toLowerCase().replace(/[°\s]/g,''),r=function(x,s){return v+" "+m[2].trim()+" ≈ "+(+x.toFixed(2))+" "+s+"."};
+  var map={c:function(){return r(v*9/5+32,"°F")},f:function(){return r((v-32)*5/9,"°C")},km:function(){return r(v*0.621371,"mi")},mi:function(){return r(v/0.621371,"km")},kg:function(){return r(v*2.20462,"lb")},lb:function(){return r(v/2.20462,"kg")},cm:function(){return r(v/2.54,"in")},in:function(){return r(v*2.54,"cm")}};
+  return map[u]?map[u]():null;
+}
+
+// Each rule: [regex, reply (string | array | function(match,text))]
+var rules=[
+[/^(hi|hey|hello|yo|sup|hola|hallo|good (morning|afternoon|evening))\b/i,function(){return S.name?pick(["Hey "+S.name+"!",greet()+", "+S.name+"!","Yo "+S.name+", what’s up?"]):pick(["Hey! What’s your name?","Yo! I’m Botty. Who are you?"])}],
+[/my name is (\w+)|i am called (\w+)|call me (\w+)/i,function(m){S.name=cap(m[1]||m[2]||m[3]);save("botty-name",S.name);return "Nice to meet you, "+S.name+"!"}],
+[/^i(?:’|')?m (\w+)$/i,function(m){if(/^(good|fine|great|bad|sad|tired|bored|ok|okay|happy|hungry|lonely|stressed)$/i.test(m[1]))return mood(m[1].toLowerCase());S.name=cap(m[1]);save("botty-name",S.name);return "Nice to meet you, "+S.name+"!"}],
+[/what(?:’|')?s my name|who am i|do you know my name/i,function(){return S.name?"You’re "+S.name+".":"You haven’t told me yet. What should I call you?"}],
+[/^(forget|clear) (everything|me|my name|all)/i,function(){S.name=null;S.notes=[];learned=[];save("botty-name",null);save("botty-notes",[]);save("botty-learned",[]);return "Done. I’ve forgotten your name, notes and everything I learned."}],
+[/remember (?:that )?(.+)/i,function(m){S.notes.push(m[1]);save("botty-notes",S.notes);return "Noted. I’ll remember: “"+m[1]+"”."}],
+[/what (?:do you|did i)(?: remember| tell you)|my notes|what did i say/i,function(){return S.notes.length?"You told me:\n"+S.notes.map(function(n,i){return (i+1)+". "+n}).join("\n"):"Nothing yet. Say “remember that …” and I’ll keep it."}],
+[/how are you|how(?:’|')?s it going|how you doing/i,["Doing great for a pile of JavaScript. You?","Pretty good! No servers were harmed today. You?"]],
+[/\b(not|never|isn(?:’|')?t|ain(?:’|')?t)\b.*\b(good|great|fine|happy|okay|well)\b/i,function(){return mood("bad")}],
+[/\b(good|great|fine|happy|awesome|amazing)\b/i,["Love that!","Nice, glad to hear it."]],
+[/\b(sad|tired|bad|stressed|bored|upset|lonely|anxious)\b/i,function(m){return mood(m[1].toLowerCase())}],
+[/who are you|what are you|your name/i,"I’m Botty, a rule-based chatbot. I match patterns in what you type, so no AI model needed. For unknown topics I send my helper Scout to Wikipedia."],
+[/who (made|built|created) you/i,"You asked someone to build me, and a pile of regexes did the rest."],
+[/how do you work|are you (ai|real|smart)/i,"I’m a list of patterns and replies. If your message matches one, I answer. If not, Scout looks it up. Not real AI, but it’s fast."],
+[/joke|funny|make me laugh/i,function(){return pick(jokes)}],
+[/\bfacts?\b|tell me something/i,function(){return pick(facts)}],
+[/\bwhat(?:’|')?s the time|\bwhat time|\btime is it|^time$/i,function(){return "It’s "+new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+"."}],
+[/\bwhat(?:’|')?s the date|\bwhat day|\bdate today|today(?:’|')?s date|^(date|today)$/i,function(){return "Today is "+new Date().toLocaleDateString([], {weekday:"long",month:"long",day:"numeric",year:"numeric"})+"."}],
+[/flip a coin|coin flip|heads or tails/i,function(){return pick(["Heads.","Tails."])}],
+[/roll (a )?(die|dice)/i,function(){return "You rolled a "+(1+Math.floor(Math.random()*6))+"."}],
+[/random number(?: between (\d+) and (\d+))?/i,function(m){var a=+(m[1]||1),b=+(m[2]||100);if(a>b){var t=a;a=b;b=t}return "How about "+(a+Math.floor(Math.random()*(b-a+1)))+"?"}],
+[/magic 8|8[- ]?ball|should i\b/i,function(){return "🎱 "+pick(ball)}],
+[/\b(rock|paper|scissors)\b.*\b(rock|paper|scissors)\b|^(rock|paper|scissors)$/i,function(m,t){var u=t.toLowerCase().match(/rock|paper|scissors/)[0],b=pick(["rock","paper","scissors"]),w={rock:"scissors",paper:"rock",scissors:"paper"};return "I pick "+b+". "+(u==b?"Tie!":w[u]==b?"You win!":"I win!")}],
+[/(-?\d+(?:\.\d+)?)\s*(°?\s*[cf]|km|mi|kg|lb|cm|in)\b\s*(?:to|in|into)\b/i,function(m){return convert(m)||"I can’t convert that."}],
+[/reverse (.+)/i,function(m){return m[1].split("").reverse().join("")}],
+[/\d.*[+\-*\/x×÷^%].*\d/i,function(m,t){return calc(t)||pick(["Hmm, that didn’t parse as a sum."])}],
+[/thank|thx|\bty\b/i,["Anytime!","No problem.","You’re welcome!"]],
+[/\bhelp\b|what can you do/i,"Try:\n• a joke or fun fact\n• time / date\n• flip a coin, roll a die, 8-ball, rock paper scissors\n• math like (12 + 3) * 7 or 20 c to f\n• “remember that …” and “my notes”\n• “make the UI better”, “make it green”, “bigger text”, “terminal theme”: Scout codes it and refreshes the page\n• “define serendipity” or “weather in Paris”\n• switch modes in the top menu: 🤖 Botty (normal), 🔒 Best (unlocks once it has learned enough), ✨ Smart (small AI on your device)\n• ask about anything: “what is a black hole?” and Scout will look it up"],
+[/love you|you(?:’|')?re (great|cool|awesome)/i,"Aw, you’re making my regexes blush."],
+[/\b(stupid|dumb|useless)\b/i,"Fair. I’m a few dozen patterns in a trench coat. Try “help” to see what I do well."],
+[/\b(bye|goodbye|see ya|cya|gtg)\b/i,function(){return "Later"+(S.name?", "+S.name:"")+"!"}],
+[/^(yes|yeah|yep|sure|ok|okay)$/i,["Cool.","Alright!"]],
+[/^(no|nope|nah)$/i,["Fair enough.","Okay, no worries."]]
+];
+
+// --- built-in knowledge
+var KB=[
+['black hole','A black hole is a region of space where gravity is so strong that nothing, not even light, can escape. Many form when massive stars collapse.'],
+['sun star','The Sun is a star at the center of our solar system. It’s about 4.6 billion years old and makes energy by fusing hydrogen into helium.'],
+['moon','The Moon is Earth’s only natural satellite. It’s about a quarter of Earth’s width and causes ocean tides.'],
+['gravity','Gravity is the force that pulls objects with mass toward each other. It keeps planets in orbit and us on the ground.'],
+['photosynthesis plant','Photosynthesis is how plants turn sunlight, water and carbon dioxide into sugar and oxygen.'],
+['dna gene genetics','DNA is the molecule that carries genetic instructions in living things. It’s shaped like a twisted ladder, a double helix.'],
+['internet web','The internet is a global network of connected computers. The web is the part of it you browse with links and pages.'],
+['javascript js','JavaScript is the programming language of the web. It runs in browsers and makes pages interactive.'],
+['python','Python is a popular programming language known for readable code. It’s used for data science, automation and websites.'],
+['html css','HTML structures web pages and CSS styles them. Together with JavaScript they power most websites.'],
+['artificial intelligence ai machine learning','AI is software that does tasks that normally need human intelligence, like understanding language or recognizing images. Machine learning trains it from examples.'],
+['neural network','A neural network is a model made of layers of simple connected units that learn patterns from data, loosely inspired by brains.'],
+['volcano lava eruption','A volcano is an opening in Earth’s crust where molten rock, ash and gas escape. Magma is called lava once it reaches the surface.'],
+['ocean sea','Oceans cover about 71 percent of Earth’s surface and hold roughly 97 percent of its water.'],
+['earthquake','Earthquakes happen when tectonic plates suddenly slip along faults and release energy as seismic waves.'],
+['dinosaur','Dinosaurs ruled Earth for about 165 million years until an asteroid impact roughly 66 million years ago. Birds are their living descendants.'],
+['pyramid egypt','The Egyptian pyramids were tombs for pharaohs. The Great Pyramid of Giza was built around 2560 BC.'],
+['chess','Chess is a two-player strategy board game on 64 squares. The goal is to checkmate the opponent’s king.'],
+['coffee','Coffee comes from roasted seeds of the coffee plant. Its caffeine blocks adenosine, a chemical that makes you feel sleepy.'],
+['pizza','Pizza started in Naples, Italy. The classic Margherita has tomato, mozzarella and basil.'],
+['music sound','Sound is vibrations traveling through air. Music organizes those vibrations into rhythm, melody and harmony.'],
+['democracy government','Democracy is a system where citizens choose leaders or laws, usually by voting.'],
+['money currency','Money is a shared agreement that lets people trade goods and services without bartering.'],
+['climate weather','Weather is what the atmosphere does day to day. Climate is the long-term average pattern.'],
+['atom molecule','Atoms are the tiny building blocks of matter. When atoms bond they form molecules, like H2O.'],
+['electricity','Electricity is the flow of charged particles, usually electrons, through a material like a wire.'],
+['cat','Cats are small carnivorous mammals domesticated about 10,000 years ago. They sleep around 12 to 16 hours a day.'],
+['dog','Dogs were the first domesticated animal, descended from wolves over 15,000 years ago.'],
+['brain','The human brain has about 86 billion neurons and uses roughly 20 percent of the body’s energy.'],
+['sleep dream','Sleep lets the brain clear waste and store memories. Most vivid dreams happen in REM sleep.'],
+['bitcoin crypto blockchain','Bitcoin is a digital currency tracked on a blockchain, a shared ledger no single party controls.'],
+['germany berlin','Germany is a country in central Europe with about 84 million people. Its capital and largest city is Berlin.'],
+['mars planet','Mars is the fourth planet from the Sun. It’s cold and dusty, with the tallest volcano in the solar system, Olympus Mons.']
+];
+var STOP='a an the is are was were what whats who whom why how when where do does did you your me my i it of to in on for about tell explain define mean means meaning please can could would know like with and or be this that there them'.split(' ');
+function stem(w){return w.replace(/(ing|ed|es|s)$/,'')}
+function rawk(s){return s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(function(w){return w.length>1&&STOP.indexOf(w)<0})}
+function toks(s){return rawk(s).map(stem)}
+// --- Lessons taught to Botty's brain (key words|answer). Visitors and Wikipedia add more over time.
+var LESSONS=[
+"sun star|The Sun is a star made mostly of hydrogen and helium. It holds 99.8% of the Solar System’s mass.",
+"moon distance far|The Moon is about 384,000 km (238,000 miles) from Earth.",
+"planets solar system|The eight planets are Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus and Neptune.",
+"biggest largest planet jupiter|Jupiter is the largest planet. More than 1,300 Earths could fit inside it.",
+"mars red planet|Mars looks red because its dust contains iron oxide, which is rust.",
+"light speed fast|Light travels about 300,000 km per second.",
+"galaxy milky way|The Milky Way is our galaxy, with hundreds of billions of stars.",
+"black hole|A black hole is a region where gravity is so strong that not even light can escape.",
+"gravity|Gravity is the force that pulls objects with mass toward each other. It keeps us on the ground and planets in orbit.",
+"tides ocean moon|Tides are caused mostly by the Moon’s gravity pulling on Earth’s oceans.",
+"eclipse|A solar eclipse is when the Moon passes between Earth and the Sun. A lunar eclipse is when Earth’s shadow falls on the Moon.",
+"seasons summer winter tilt|Seasons happen because Earth’s axis is tilted about 23.5 degrees, not because of distance from the Sun.",
+"first person walk moon armstrong|Neil Armstrong was the first person to walk on the Moon, in 1969.",
+"first person space gagarin|Yuri Gagarin was the first person in space, in 1961.",
+"water boil freeze temperature|Water freezes at 0°C (32°F) and boils at 100°C (212°F) at sea level.",
+"water h2o made|Water is H2O: two hydrogen atoms and one oxygen atom.",
+"atom atoms|Atoms are the tiny building blocks of matter, made of protons, neutrons and electrons.",
+"dna genes|DNA is the molecule that carries the instructions for building and running living things.",
+"photosynthesis plants|Plants use sunlight, water and carbon dioxide to make sugar and oxygen. That’s photosynthesis.",
+"air oxygen nitrogen breathe|Air is about 78% nitrogen and 21% oxygen.",
+"rainbow|A rainbow forms when sunlight is bent and reflected inside raindrops, splitting it into colors.",
+"sky blue why|The sky looks blue because air scatters blue light from the Sun more than other colors.",
+"thunder lightning|Lightning heats air so fast it expands and makes the sound we call thunder.",
+"earthquake quake|Earthquakes happen when pieces of Earth’s crust (tectonic plates) suddenly slip past each other.",
+"volcano erupt|A volcano is an opening in Earth’s crust where molten rock (magma), ash and gas can escape.",
+"biggest deepest ocean pacific|The Pacific is the biggest and deepest ocean.",
+"tallest highest mountain everest|Mount Everest is the tallest mountain above sea level, about 8,849 m.",
+"longest river nile amazon|The Nile and the Amazon are the two longest rivers. Which is longer depends on how you measure.",
+"continents seven|The seven continents are Africa, Antarctica, Asia, Australia/Oceania, Europe, North America and South America.",
+"electricity electric current|Electricity is the flow of electric charge, usually electrons moving through a wire.",
+"sound speed|Sound travels about 343 m/s in air, much slower than light.",
+"evolution natural selection|Evolution is how living things change over many generations through natural selection.",
+"climate change global warming|Global warming is the rise in Earth’s average temperature, mainly from burning fossil fuels that add greenhouse gases like CO2.",
+"periodic table elements|The periodic table organizes all known chemical elements by atomic number.",
+"fastest animal cheetah|The cheetah is the fastest land animal, over 100 km/h in short bursts.",
+"biggest largest animal blue whale|The blue whale is the largest animal ever known.",
+"dinosaur extinct die|Most dinosaurs died out about 66 million years ago, likely after a huge asteroid hit Earth.",
+"bee bees honey|Bees collect nectar and turn it into honey, and they pollinate many of our crops.",
+"spider insect|Spiders aren’t insects. They have eight legs and two body parts; insects have six legs and three.",
+"bat bats mammal fly|Bats are the only mammals that can truly fly.",
+"whale fish mammal|Whales are mammals, not fish. They breathe air and feed milk to their young.",
+"penguin penguins|Penguins are flightless birds that swim, and almost all live in the Southern Hemisphere.",
+"chameleon color|Chameleons change color mostly to communicate and manage temperature, not just to hide.",
+"dog years age human|The “one dog year = seven human years” rule is only a rough guess. Aging varies by size and breed.",
+"heart blood pump|The heart pumps blood around the body, beating roughly 100,000 times a day.",
+"bones skeleton human how many|An adult human has 206 bones.",
+"brain neurons|The brain is the body’s control center, with about 86 billion neurons.",
+"sleep hours need|Most adults need about 7 to 9 hours of sleep. Teens need around 8 to 10.",
+"vitamin c|Vitamin C helps your body heal and fight infection. It’s found in citrus, peppers and berries.",
+"hiccups hiccup|Hiccups are sudden spasms of the diaphragm followed by the voice box snapping shut.",
+"teeth adult how many|Adults normally have 32 teeth, including wisdom teeth.",
+"skin largest organ|Skin is the body’s largest organ.",
+"blood types type|The main blood types are A, B, AB and O, each either positive or negative.",
+"water drink day how much|Many people do well with about 6 to 8 glasses of fluid a day, but needs vary.",
+"capital france paris|The capital of France is Paris.",
+"capital japan tokyo|Tokyo is the capital of Japan.",
+"capital usa america united states washington|Washington, D.C. is the capital of the United States.",
+"capital uk britain england london|London is the capital of the United Kingdom.",
+"capital canada ottawa|Ottawa is the capital of Canada.",
+"capital australia canberra|Canberra, not Sydney, is the capital of Australia.",
+"capital brazil brasilia|Brasília is the capital of Brazil.",
+"capital india delhi|New Delhi is the capital of India.",
+"capital china beijing|Beijing is the capital of China.",
+"capital italy rome|Rome is the capital of Italy.",
+"capital spain madrid|Madrid is the capital of Spain.",
+"capital egypt cairo|Cairo is the capital of Egypt.",
+"capital mexico|Mexico City is the capital of Mexico.",
+"capital russia moscow|Moscow is the capital of Russia.",
+"capital south korea seoul|Seoul is the capital of South Korea.",
+"largest biggest country russia|Russia is the largest country by area. The most populous countries are India and China.",
+"smallest country vatican|Vatican City is the smallest country in the world.",
+"language spoken most speakers|Mandarin Chinese has the most native speakers. English is the most widely spoken overall.",
+"how many countries world|There are 193 UN member countries, plus 2 observer states (Vatican City and Palestine).",
+"sahara desert largest|The Sahara is the largest hot desert. Antarctica is the largest desert overall.",
+"great wall china|The Great Wall of China is thousands of km long. It was built over many centuries to defend against invasions.",
+"pyramids egypt pyramid|The Egyptian pyramids were built as tombs for pharaohs about 4,500 years ago.",
+"world war 2 ii second end ended|World War II ended in 1945.",
+"world war 1 i first|World War I lasted from 1914 to 1918.",
+"first president usa washington|George Washington was the first U.S. president.",
+"internet invented invent who|The internet grew from ARPANET in the 1960s and 70s. Tim Berners-Lee invented the World Wide Web in 1989.",
+"printing press gutenberg|Johannes Gutenberg introduced the movable-type printing press in Europe around 1450.",
+"telephone invented bell|Alexander Graham Bell is credited with patenting the telephone in 1876.",
+"light bulb edison|Thomas Edison made the first practical light bulb in 1879, building on earlier inventors’ work.",
+"columbus america 1492|Christopher Columbus reached the Americas in 1492.",
+"titanic sink sank|The Titanic sank in April 1912 after hitting an iceberg.",
+"einstein relativity|Albert Einstein developed the theory of relativity, famous for E = mc².",
+"newton|Isaac Newton described gravity and the three laws of motion.",
+"shakespeare|William Shakespeare was an English playwright who wrote Hamlet, Macbeth and Romeo and Juliet.",
+"mona lisa leonardo painted|Leonardo da Vinci painted the Mona Lisa.",
+"html css javascript web page|HTML is a page’s structure, CSS is its style, and JavaScript is its behavior.",
+"ai artificial intelligence|AI (artificial intelligence) is software that does tasks that normally need human thinking, like understanding language or recognizing images.",
+"machine learning|Machine learning means a program learns patterns from data instead of being given every rule.",
+"algorithm|An algorithm is a step-by-step set of instructions for solving a problem.",
+"variable programming code|A variable is a named box in a program that stores a value.",
+"loop programming code|A loop repeats code until a condition is met.",
+"bug debug debugging|A bug is a mistake in code. Debugging is finding and fixing it.",
+"python language|Python is a popular, beginner-friendly programming language.",
+"binary computer|Binary is the base-2 number system computers use, with only 0s and 1s.",
+"wifi wi-fi|Wi-Fi sends data wirelessly using radio waves between your device and a router.",
+"password safe strong|Use long, unique passwords (a phrase works well) and turn on two-factor authentication.",
+"cpu ram computer memory|The CPU does the computing. RAM is short-term memory for what’s running right now.",
+"open source|Open-source software has code anyone can read, use and improve.",
+"website domain server|A website lives on a server. A domain name like example.com is its address.",
+"pi circle|Pi (π) is about 3.14159, the ratio of a circle’s circumference to its diameter.",
+"prime number primes|A prime number has exactly two factors: 1 and itself, like 2, 3, 5 and 7.",
+"pythagorean theorem triangle|In a right triangle, a² + b² = c², where c is the longest side.",
+"percent percentage calculate|To find a percent, divide the part by the whole and multiply by 100.",
+"area circle circumference|The area of a circle is π × r². Its circumference is 2 × π × r.",
+"fibonacci sequence|The Fibonacci sequence starts 0, 1, 1, 2, 3, 5, 8, where each number is the sum of the two before it.",
+"study tips focus homework|Study in short focused blocks (about 25 minutes), take breaks, and test yourself instead of rereading.",
+"save money saving|A simple rule: set aside some of any money you get before spending the rest.",
+"calm anxious stress nervous|Try slow breathing: in for 4 seconds, out for 6, a few times. Talking to someone you trust helps too.",
+"make friends friendship|Be curious about others, ask questions, and show up regularly. Friendships grow with repeated time together.",
+"healthy eating food diet|Eat plenty of fruit, vegetables and whole foods, and drink water. Balance matters more than perfection.",
+"exercise workout how much|Aim for around 60 minutes of movement a day for kids and about 150 minutes a week for adults."
+].map(function(x){var i=x.indexOf("|");return [x.slice(0,i),x.slice(i+1)]});
+var BASE=KB;
+var UNLOCK=100,BR=load("botty-brain",[]);
+function unlocked(){return BR.length>=UNLOCK||!!load("botty-unlocked",false)}
+function addBR(k,a,quiet){
+  k=String(k||"").trim();a=String(a||"").trim();if(!k||!a)return;
+  for(var i=0;i<BR.length;i++)if(BR[i][0]===k&&BR[i][1]===a)return;
+  BR.push([k,a]);if(BR.length>600)BR=BR.slice(-600);save("botty-brain",BR);
+  if(!load("botty-unlocked",false)&&BR.length>=UNLOCK){save("botty-unlocked",true);if(!quiet)setTimeout(function(){later("🎉 My brain just hit "+UNLOCK+" lessons. Best mode is unlocked! Pick it in the top menu.")},1800)}
+  brain();
+}
+function study(t){
+  var have={},k=toks(t),pk=[],best=null,bs=0;BR.forEach(function(e){have[e[0]]=1});
+  var todo=LESSONS.filter(function(e){return !have[e[0]]});
+  todo.forEach(function(e){var kt=toks(e[0]),n=0;k.forEach(function(w){if(kt.indexOf(w)>-1)n++});if(n>bs){bs=n;best=e}});
+  if(best)pk.push(best);
+  todo.forEach(function(e){if(pk.length<4&&pk.indexOf(e)<0)pk.push(e)});
+  pk.forEach(function(e){addBR(e[0],e[1])});
+}
+function brain(){
+  var n=BR.length,pct=Math.min(99,Math.round(n/UNLOCK*100)),lv=n<60?"Baby":n<150?"Student":n<300?"Scholar":"Genius",el=document.getElementById("brain"),opt=document.querySelector("#mode option[value=best]");
+  if(opt){opt.disabled=!unlocked();opt.textContent=unlocked()?"🧠 Best":"🔒 Best "+pct+"%"}
+  if(!el)return;
+  var tag=unlocked()?"🧠 "+lv+" brain · "+n+" lessons":"🔒 Best brain "+pct+"% learned";
+  el.textContent=MODE==="botty"?"Normal mode · "+tag:MODE==="smart"?"Smart mode · "+tag:tag;
+}
+function research(q){
+  var k=toks(q),all=(MODE==="botty"?BASE.concat(learned):BASE.concat(BR)),best=null,bs=0;
+  all.forEach(function(e){
+    var kt=toks(e[0]),tt=toks(e[1]),s=0;
+    k.forEach(function(w){if(kt.indexOf(w)>-1)s+=3;else if(tt.indexOf(w)>-1)s+=1});
+    if(s>bs){bs=s;best=e}
+  });
+  return {k:k,n:all.length,best:best,score:bs,conf:Math.min(100,Math.round(bs/Math.max(1,k.length*3)*100))};
+}
+
+// --- UI helpers
+function scroll(){log.scrollTop=log.scrollHeight}
+function add(txt,who,noSave){
+  var d=document.createElement("div");d.className="m "+who;d.textContent=txt;log.appendChild(d);scroll();
+  if(!noSave&&(who=="me"||who=="bot")){hist.push({t:txt,w:who});if(hist.length>80)hist.shift();save("botty-history",hist)}
+  return d;
+}
+function later(txt){
+  var d=document.createElement("div");d.className="m bot typing";d.innerHTML="<span></span><span></span><span></span>";log.appendChild(d);scroll();
+  setTimeout(function(){d.className="m bot";d.textContent=txt;hist.push({t:txt,w:"bot"});save("botty-history",hist.slice(-80));scroll();chips()},350+Math.min(900,txt.length*8)+Math.random()*250);
+}
+function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
+function chips(){
+  var set=S.teach?["no"]:["Tell me a joke","Make the UI better","Fun fact","What is a black hole?","(12 + 3) * 7","20 c to f","Define serendipity","Weather in Paris","Magic 8-ball","Help"];
+  chipsEl.innerHTML="";
+  set.forEach(function(c){var b=document.createElement("button");b.type="button";b.textContent=c;b.onclick=function(){send(c)};chipsEl.appendChild(b)});
+}
+
+// --- Wikipedia
+async function wiki(q){
+  var api='https://en.wikipedia.org/w/api.php?format=json&origin=*&';
+  var get=async function(u){var c=new AbortController(),tm=setTimeout(function(){c.abort()},6000);try{return await (await fetch(api+u,{signal:c.signal})).json()}finally{clearTimeout(tm)}};
+  var s=await get('action=query&list=search&srlimit=5&srsearch='+encodeURIComponent(q));
+  var hits=(s.query&&s.query.search)||[],k=toks(q);
+  hits.forEach(function(h,i){var tt=toks(h.title),n=0;k.forEach(function(w){if(tt.indexOf(w)>-1)n+=2});h.sc=n-i*0.3});
+  hits.sort(function(a,b){return b.sc-a.sc});
+  for(var i=0;i<Math.min(3,hits.length);i++){
+    var p=await get('action=query&prop=extracts&explaintext=1&exintro=1&redirects=1&titles='+encodeURIComponent(hits[i].title));
+    var pg=p.query.pages,x=pg[Object.keys(pg)[0]];
+    if(x&&x.extract&&!/(may|can) (also )?refer to/.test(x.extract.slice(0,300)))return {title:x.title,text:x.extract};
+  }
+  return null;
+}
+function digest(q,title,text){
+  text=text.replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').replace(/ ([,.;])/g,'$1');
+  var ss=(text.match(/[^.!?]+[.!?]+(?=\s|$)/g)||[text]).map(function(s){return s.trim()}).filter(function(s){return s.length>25});
+  if(!ss.length)return null;
+  var k=toks(q),ql=q.toLowerCase(),all=toks(title+' '+text),rel=0;
+  k.forEach(function(w){if(all.indexOf(w)>-1)rel++});
+  if(k.length&&rel<Math.max(1,Math.floor(k.length/2)))return null;
+  var num=/\b(when|how (many|much|tall|long|old|big|far|high|deep)|year|height|population)\b/.test(ql);
+  var sc=ss.map(function(s,i){var t=toks(s),n=0;k.forEach(function(w){if(t.indexOf(w)>-1)n++});if(num&&/\d/.test(s))n+=1.5;if(i==0)n+=1.5;return {i:i,n:n-i*0.1}});
+  sc.sort(function(a,b){return b.n-a.n});
+  var idx=sc.slice(0,2).map(function(o){return o.i}).sort(function(a,b){return a-b});
+  var out=idx.map(function(i){return ss[i]}).join(' ');
+  return out.length>380?ss[idx[0]]:out;
+}
+async function consult(t){
+  add('Hmm, I don’t know that one. Let me ask Scout…','bot',true);
+  var h=add('🔎 Scout: on it.','helper',true),r=research(t),q=rawk(t).join(' ')||t,ans=null,src='';
+  var line=function(x){h.textContent+='\n'+x;scroll()};
+  await wait(500);line('Search terms: '+q);line('🌐 Trying Wikipedia…');
+  try{var w=await wiki(q),d=w&&digest(t,w.title,w.text);if(d){ans=d;src='Wikipedia: '+w.title;line('✔ Found “'+w.title+'”')}else line('✘ Nothing relevant on Wikipedia')}
+  catch(e){line('✘ No internet here, checking my own library')}
+  if(!ans&&r.score>=2){ans=r.best[1];src='built-in library';line('📚 Library match: “'+r.best[0]+'” ('+r.conf+'% sure)')}
+  await wait(400);
+  if(ans){
+    var d2=add(pick(['Scout came back with this: ','Okay, Scout says: ','Turns out: '])+ans,'bot');
+    var s=document.createElement('span');s.className='src';s.textContent='Source: '+src;d2.appendChild(s);scroll();
+    if(src!=='built-in library'){learned.push([q,ans]);addBR(q,ans);save('botty-learned',learned.slice(-100))}
+  }else{S.teach=q;add('Scout found nothing on “'+q+'”. Want to teach me? Type what it is (or “no”). Or switch to Smart mode (menu at the top) for a small AI that runs on your device.','bot');chips()}
+}
+
+// --- core
+function reply(t){
+  for(var i=0;i<rules.length;i++){
+    var m=t.match(rules[i][0]);
+    if(m){var r=rules[i][1],o=typeof r=="function"?r(m,t):Array.isArray(r)?pick(r):r;if(o!==null&&o!==undefined)return o}
+  }
+  return null;
+}
+function send(t){
+  t=t.trim();if(!t)return;
+  add(t,'me');
+  if(S.teach){
+    var topic=S.teach;S.teach=null;chips();
+    if(/^(no|nah|nope|skip|cancel)$/i.test(t))return later('No worries, I’ll stay clueless.');
+    learned.push([topic,t]);addBR(topic,t);save('botty-learned',learned);
+    return later('Got it! Scout filed that away. Ask me again anytime.');
+  }
+  if(MODE!=="best")study(t);
+  var tl=toolPlan(t);if(tl)return runTool(tl);
+  if(isUI(t))return scoutBuild(t);
+  var short=t.split(/\s+/).length<=5,r=(!smartOn()||short)?reply(t):null;
+  if(r!==null)return later(r);
+  var q=(MODE!=="botty"||learned.length)&&research(t);
+  if(confident(q))return later(q.best[1]);
+  if(smartOn())return smartAI(t);
+  consult(t);
+}
+function restore(){
+  if(!hist.length){add("Hey! I’m Botty, a free chatbot. What’s your name?","bot");return}
+  hist.forEach(function(h){add(h.t,h.w,true)});
+  add(S.name?"Welcome back, "+S.name+"!":"Welcome back!","bot",true);
+}
+document.getElementById("f").onsubmit=function(e){e.preventDefault();var v=inp.value;inp.value="";send(v)};
+document.getElementById("clear").onclick=function(){hist=[];save("botty-history",[]);log.innerHTML="";S.teach=null;add("Chat cleared. Say “help” to see what I can do.","bot");chips()};
+document.getElementById("theme").onclick=function(){
+  var r=document.documentElement,dark=r.dataset.theme?r.dataset.theme=="dark":matchMedia("(prefers-color-scheme:dark)").matches;
+  r.dataset.theme=dark?"light":"dark";save("botty-theme",r.dataset.theme);
+};
+var th=load("botty-theme",null);if(th)document.documentElement.dataset.theme=th;
+// --- Scout UI builder: Botty can't restyle itself, so Scout writes CSS, saves it and refreshes the page
+var UI=load("botty-ui",{});
+var UI_ORDER=["theme","color","shape","font","size","density","ai"];
+function uiCSS(){return UI_ORDER.map(function(k){return UI[k]?UI[k].css:""}).join("\n")}
+function injectUI(){var s=document.getElementById("scout-ui");if(!s){s=document.createElement("style");s.id="scout-ui";document.head.appendChild(s)}s.textContent=uiCSS()}
+function R(v){return "html:root:root{"+v+"}"}
+var MONO="ui-monospace,Menlo,Consolas,monospace";
+var THEMES={
+ modern:{d:"gradient header, soft shadows, polished bubbles",css:R("--line:rgba(120,120,140,.25)")+"\n.app{box-shadow:0 10px 40px rgba(30,40,90,.18)}\nheader{background:linear-gradient(135deg,var(--me),#9775fa);color:#fff;border:0}\nheader small{color:rgba(255,255,255,.8)}\n.av{background:rgba(255,255,255,.25)}\n.ib{color:#fff}\n.m{box-shadow:0 1px 3px rgba(0,0,0,.12);border-radius:18px}\n.me{background:linear-gradient(135deg,var(--me),#9775fa)}"},
+ sunset:{d:"warm orange-to-pink gradients",css:"header{background:linear-gradient(135deg,#f76707,#d6336c);color:#fff;border:0}\nheader small{color:rgba(255,255,255,.85)}\n.av{background:rgba(255,255,255,.25)}\n.ib{color:#fff}\n#log{background:linear-gradient(180deg,rgba(247,103,7,.08),rgba(214,51,108,.1))}\n.me{background:linear-gradient(135deg,#f76707,#d6336c)}\n.m{border-radius:20px}"},
+ glass:{d:"frosted glass card on a gradient backdrop",css:"body{background:linear-gradient(135deg,#667eea,#764ba2)}\n.app{max-width:520px;height:calc(100% - 24px);margin:12px;border-radius:24px;overflow:hidden;background:rgba(255,255,255,.55);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.6);color:#1d1d1b}\nheader,form{border-color:rgba(255,255,255,.6)}\nheader small,.src{color:#555}\n.ib,.helper{color:#333}\n.bot{background:rgba(255,255,255,.8);color:#1d1d1b}\ninput{background:rgba(255,255,255,.85);color:#1d1d1b}\n.chips button{background:rgba(255,255,255,.75);color:#1d1d1b}"},
+ terminal:{d:"green-on-black hacker terminal",css:R("--bg:#000;--card:#0b0f0b;--text:#33ff66;--muted:#1f9d45;--me:#33ff66;--meText:#001a08;--bot:#0f1a0f;--line:#144d24")+"\nbody,input,button{font-family:"+MONO+"}\n.m,.av,.chips button,input,form button{border-radius:2px}"},
+ cozy:{d:"warm paper tones with a serif font",css:R("--bg:#f3e9d8;--card:#fbf5e9;--text:#3b2f22;--muted:#8a7762;--me:#b5651d;--meText:#fff;--bot:#efe1c8;--line:#e2d2b4")+"\nbody,input,button{font-family:Georgia,'Times New Roman',serif}"},
+ minimal:{d:"clean black and white, flat",css:R("--bg:#fff;--card:#fff;--text:#111;--muted:#888;--me:#111;--meText:#fff;--bot:#f1f1f1;--line:#eee")+"\n.m{border-radius:8px}\nheader{border:0}"}
+};
+var THEME_RE=[[/terminal|matrix|hacker|retro/,"terminal"],[/sunset|gradient|colou?rful|vibrant/,"sunset"],[/glass|frosted|blur/,"glass"],[/cozy|paper|warm|vintage|sepia/,"cozy"],[/minimal|clean|simple|plain|flat/,"minimal"],[/\bmodern\b|sleek/,"modern"]];
+var COLORS={blue:"#3b5bdb",green:"#2f9e44",red:"#e03131",purple:"#7048e8",pink:"#d6336c",orange:"#f76707",teal:"#0c8599",yellow:"#e8a900",black:"#212529",indigo:"#4263eb"};
+var UI_MENU="I can do: colors (“make it green”), themes (modern, sunset, glass, terminal, cozy, minimal), text size, bubble shape (rounder / square), fonts (serif, mono, comic), spacing (compact / roomy), dark or light mode, or just “make the UI better”. Say “undo the UI” to reset.";
+function isUI(t){
+  var s=t.toLowerCase();
+  if(/^(what|who|why|when|where|how)\b/.test(s))return false;
+  var noun=/\b(ui|interface|design|looks?|theme|styles?|colou?rs?|fonts?|bubbles?|layout|appearance|skin|text size)\b/.test(s);
+  var verb=/\b(make|change|redesign|improve|update|restyle|give|switch|turn|upgrade|fix|revamp|style|undo|reset|revert)\b/.test(s);
+  var adj=/\b(better|nicer|prettier|modern|bigger|larger|smaller|rounder|cooler|fancier)\b/.test(s);
+  var it=/\bmake (it|this|the (chat|app|page))\b.*\b(blue|green|red|purple|pink|orange|teal|yellow|black|indigo|bigger|smaller|better|nicer|prettier|rounder|darker|dark|light|compact|serif|modern|cooler|fancier)\b/.test(s);
+  return (verb&&noun)||(adj&&noun)||it||/^(dark|light) mode$/.test(s)||/^(bigger|larger|smaller) (text|font)$/.test(s);
+}
+function planUI(t){
+  var s=t.toLowerCase(),m,k;
+  if(/\b(undo|reset|revert|restore|original)\b/.test(s))return {reset:true,label:"back to the original look"};
+  if(/\blight (mode|theme)\b|\bbrighter\b/.test(s))return {mode:"light",label:"light mode"};
+  if(/\bdark (mode|theme)\b|\bdarker\b|\bnight\b/.test(s))return {mode:"dark",label:"dark mode"};
+  for(var i=0;i<THEME_RE.length;i++)if(THEME_RE[i][0].test(s)){k=THEME_RE[i][1];return {cat:"theme",name:k,css:THEMES[k].css,label:"the “"+k+"” theme ("+THEMES[k].d+")"}}
+  if(m=s.match(/\b(blue|green|red|purple|pink|orange|teal|yellow|black|indigo)\b/))return {cat:"color",name:m[1],css:R("--me:"+COLORS[m[1]]),label:"accent color "+m[1]};
+  if(/\b(bigger|larger|big|huge|increase|readable)\b/.test(s)&&/\b(text|font|letters|writing|size|readable)\b/.test(s))return {cat:"size",name:"big",css:"body,input,.helper{font-size:19px}\n.helper{font-size:15px}",label:"bigger text"};
+  if(/\b(smaller|tiny|decrease)\b/.test(s)&&/\b(text|font|letters|writing|size)\b/.test(s))return {cat:"size",name:"small",css:"body,input{font-size:15px}\n.m{font-size:14px}",label:"smaller text"};
+  if(/\b(rounder|round|rounded|bubbly|pill)\b/.test(s))return {cat:"shape",name:"round",css:".m{border-radius:26px}\n.bot{border-bottom-left-radius:6px}\n.me{border-bottom-right-radius:6px}",label:"rounder bubbles"};
+  if(/\b(square|sharp|boxy|angular)\b/.test(s))return {cat:"shape",name:"square",css:".m,.chips button,input,form button{border-radius:3px!important}",label:"square bubbles"};
+  if(/\bserif\b/.test(s))return {cat:"font",name:"serif",css:"body,input,button{font-family:Georgia,'Times New Roman',serif}",label:"a serif font"};
+  if(/\b(mono|monospace|code)\b/.test(s))return {cat:"font",name:"mono",css:"body,input,button{font-family:"+MONO+"}",label:"a monospace font"};
+  if(/\b(comic|handwrit\w*|playful)\b/.test(s))return {cat:"font",name:"comic",css:"body,input,button{font-family:'Comic Sans MS','Chalkboard SE',cursive}",label:"a playful font"};
+  if(/\b(sans|default font)\b/.test(s))return {cat:"font",name:"sans",css:"",label:"the default font"};
+  if(/\b(compact|tight|dense)\b/.test(s))return {cat:"density",name:"compact",css:"#log{gap:3px;padding:10px}\n.m{padding:6px 10px}",label:"a compact layout"};
+  if(/\b(spacious|roomy|airy|more space)\b/.test(s))return {cat:"density",name:"roomy",css:"#log{gap:14px;padding:18px}\n.m{padding:12px 16px}",label:"a roomier layout"};
+  if(/\b(better|nicer|prettier|modern|cooler|fancier|improve|upgrade|redesign|revamp|polish|beautiful|glow|good|great)\b/.test(s)){
+    var seq=["modern","sunset","glass","cozy"],cur=UI.theme&&UI.theme.name,n=seq[(seq.indexOf(cur)+1)%seq.length];
+    return {cat:"theme",name:n,css:THEMES[n].css,label:"the “"+n+"” theme ("+THEMES[n].d+")"};
+  }
+  return null;
+}
+function snippet(css){
+  var ls=css.replace(/\{/g," {\n  ").replace(/;(?!\s*\})/g,";\n  ").replace(/\}/g,"\n}").split("\n").map(function(l){return l.trim()?l.replace(/\s+$/,""):""}).filter(Boolean);
+  var out=ls.slice(0,9).map(function(l){return l.length>56?l.slice(0,55)+"…":l});
+  return out.join("\n")+(ls.length>9?"\n… (+"+(ls.length-9)+" more lines)":"");
+}
+async function scoutBuild(t){
+  var p=planUI(t);
+  add("I can’t restyle myself, I’m only patterns. Let me get Scout to code it…","bot");
+  var h=add("🔎 Scout: UI job, I’ve got this.","helper",true);
+  var line=function(x){h.textContent+="\n"+x;scroll()};
+  await wait(700);
+  if(!p){line("🤔 I don’t have a recipe for that one.");await wait(400);return later(UI_MENU)}
+  line("📐 Plan: "+p.label);await wait(700);
+  if(p.reset){line("🧹 Removing my custom CSS…");UI={};save("botty-theme",null)}
+  else if(p.mode){line("✍️ Switching the color scheme to "+p.mode+"…");save("botty-theme",p.mode)}
+  else{line("✍️ Writing CSS:\n"+(snippet(p.css)||"(clearing the font override)"));await wait(1200);UI[p.cat]={name:p.name,css:p.css}}
+  save("botty-ui",UI);
+  line("💾 Saved to this browser");await wait(600);
+  if(JSON.stringify(load("botty-ui",null))!==JSON.stringify(UI)){
+    injectUI();if(p.mode)document.documentElement.dataset.theme=p.mode;
+    line("⚠️ This browser won’t let me save, so I applied it live. A refresh will reset it.");
+    return later("Done, it’s live: "+p.label+".");
+  }
+  line("🔄 Refreshing the page…");
+  save("botty-after",p.label);
+  await wait(900);
+  location.reload();
+}
+// --- Free tools (no API keys): dictionary + weather
+async function jget(u){var c=new AbortController(),tm=setTimeout(function(){c.abort()},7000);try{var r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error("HTTP "+r.status);return await r.json()}finally{clearTimeout(tm)}}
+var WCODE={0:"clear",1:"mostly clear",2:"partly cloudy",3:"overcast",45:"foggy",48:"foggy",51:"light drizzle",53:"drizzle",55:"heavy drizzle",61:"light rain",63:"rain",65:"heavy rain",71:"light snow",73:"snow",75:"heavy snow",80:"rain showers",81:"rain showers",82:"heavy showers",95:"thunderstorm",96:"thunderstorm with hail",99:"thunderstorm with hail"};
+function toolPlan(t){
+  var d=t.match(/^(?:define|definition of|meaning of)\s+([a-z'-]+)\??$/i)||t.match(/^what(?:’s|'s| is) the (?:meaning|definition) of ([a-z'-]+)\??$/i)||t.match(/^what does ([a-z'-]+) mean\??$/i);
+  if(d)return {k:"def",a:d[1].toLowerCase()};
+  var w=t.match(/^(?:what(?:’s|'s| is) the )?(?:weather|temperature|forecast)\s+(?:in|for|at)\s+(.+?)\??$/i);
+  if(w)return {k:"wx",a:w[1]};
+  return null;
+}
+function sayWith(txt,src){var m=add(txt,"bot"),sp=document.createElement("span");sp.className="src";sp.textContent="Source: "+src;m.appendChild(sp);scroll()}
+async function runTool(p){
+  try{
+    if(p.k==="def"){
+      var e=await jget("https://api.dictionaryapi.dev/api/v2/entries/en/"+encodeURIComponent(p.a)),m=e[0].meanings[0];
+      var dtx=cap(p.a)+" ("+m.partOfSpeech+"): "+m.definitions[0].definition;addBR("define "+p.a+" meaning definition",dtx);return sayWith(dtx,"Free Dictionary API");
+    }
+    var g=await jget("https://geocoding-api.open-meteo.com/v1/search?count=1&name="+encodeURIComponent(p.a));
+    if(!g.results)return later("I couldn’t find a place called “"+p.a+"”.");
+    var c=g.results[0],f=await jget("https://api.open-meteo.com/v1/forecast?latitude="+c.latitude+"&longitude="+c.longitude+"&current=temperature_2m,weather_code,wind_speed_10m"),n=f.current,tc=Math.round(n.temperature_2m);
+    sayWith(c.name+(c.country?", "+c.country:"")+": "+tc+"°C ("+Math.round(tc*9/5+32)+"°F), "+(WCODE[n.weather_code]||"mixed conditions")+", wind "+Math.round(n.wind_speed_10m)+" km/h.","Open-Meteo");
+  }catch(err){later(p.k==="def"?"I couldn’t find that word (or I’m offline).":"I couldn’t get the weather right now (or I’m offline).")}
+}
+// --- Smart mode: a small AI that runs ON THE VISITOR'S DEVICE (Chrome built-in AI, else WebLLM). No servers, no keys, no cost to you.
+var AI={kind:null,msgs:[],failed:false};
+var SYS="You are Scout, a friendly helper inside a small chatbot website. Answer briefly (under 100 words) in plain text, no markdown.";
+var OPT={expectedInputs:[{type:"text",languages:["en"]}],expectedOutputs:[{type:"text",languages:["en"]}]};
+var MODE=load("botty-mode",null)||(load("botty-smart",false)?"smart":"botty");
+if(MODE==="best"&&!unlocked())MODE="botty";
+var MODES={botty:"Botty mode: the original rule-based bot. Chat with me and my hidden Best brain studies lessons and stores what I look up. It unlocks at "+UNLOCK+" lessons.",best:"Best mode: the full brain I grew from lessons, searches and teaching. I answer from everything I stored and keep learning.",smart:"Smart mode: a small AI on your own device for anything I don’t know, and it also feeds my Best brain. The first time may download a few hundred MB, and it works best in Chrome or Edge on a computer."};
+function smartOn(){return MODE==="smart"}
+function confident(q){return q&&((q.score>=4&&q.conf>=60)||(q.score>=3&&q.conf>=100))}
+async function loadAI(h){
+  var base=h.textContent,say=function(x){h.textContent=base+"\n"+x;scroll()};
+  if(window.LanguageModel){
+    try{
+      var av=await LanguageModel.availability(OPT);
+      if(av!=="unavailable"){
+        say(av==="available"?"Using your browser’s built-in AI…":"Your browser is downloading its built-in AI (one time)…");
+        AI.s=await LanguageModel.create(Object.assign({initialPrompts:[{role:"system",content:SYS}],monitor:function(m){m.addEventListener("downloadprogress",function(e){say("Downloading built-in AI… "+Math.round(e.loaded*100)+"%")})}},OPT));
+        AI.kind="chrome";return;
+      }
+    }catch(e){}
+  }
+  if(!navigator.gpu)throw new Error("this browser has no WebGPU");
+  say("Loading a small AI model onto your device. First time is a big download (~700 MB)…");
+  var W=await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm");
+  AI.eng=await W.CreateMLCEngine("Llama-3.2-1B-Instruct-q4f16_1-MLC",{initProgressCallback:function(p){say(p.text||"Loading…")}});
+  AI.kind="webllm";
+}
+async function smartAI(t){
+  var h=add("🧠 Scout: thinking…","helper",true),out;
+  try{
+    if(AI.failed)throw new Error("not supported here");
+    if(!AI.kind)await loadAI(h);
+    if(AI.kind==="chrome")out=await AI.s.prompt(t);
+    else{
+      AI.msgs.push({role:"user",content:t});
+      var r=await AI.eng.chat.completions.create({messages:[{role:"system",content:SYS}].concat(AI.msgs.slice(-8)),max_tokens:300});
+      out=r.choices[0].message.content;AI.msgs.push({role:"assistant",content:out});
+    }
+    h.textContent="🧠 Scout: answered on your device.";
+    add(String(out).trim().slice(0,2000),"bot");addBR(t,String(out).trim().slice(0,400));
+  }catch(e){
+    AI.failed=!AI.kind;
+    h.textContent="🧠 Scout: smart mode isn’t available here ("+e.message+"). Using my built-in tricks.";
+    consult(t);
+  }
+}
+var modeEl=document.getElementById("mode");modeEl.value=MODE;learned.forEach(function(e){addBR(e[0],e[1],true)});brain();
+modeEl.onchange=function(){if(modeEl.value==="best"&&!unlocked()){modeEl.value=MODE;return later("🔒 Best mode is still learning ("+BR.length+"/"+UNLOCK+" lessons). Chat with me in Botty or Smart mode and it will unlock.")}MODE=modeEl.value;save("botty-mode",MODE);brain();later(MODES[MODE])};
+try{localStorage.removeItem("botty-key");localStorage.removeItem("botty-plugins")}catch(e){}
+
+injectUI();brain();
+restore();chips();
+var afterUI=load("botty-after",null);
+if(afterUI){save("botty-after",null);add("🔎 Scout refreshed the page with "+afterUI+". How does it look? Say “undo the UI” to go back, or ask for more.","bot")}
+</script>
+<script type="module">
+// ===== FIREBASE SETUP: paste your web app settings here (Firebase console > Project settings > Your apps). These values are safe to be public. =====
+const CFG={apiKey:"YOUR_API_KEY",authDomain:"YOUR_PROJECT.firebaseapp.com",projectId:"YOUR_PROJECT_ID",appId:"YOUR_APP_ID"};
+// ==========================================================================================================================================
+const btn=document.getElementById("acct"),dlg=document.getElementById("login");
+if(CFG.apiKey.startsWith("YOUR_")){
+  btn.onclick=()=>window.later("Login isn’t set up yet. The site owner needs to paste the Firebase settings at the top of the last script.");
+}else try{
+  const G="https://www.gstatic.com/firebasejs/10.14.1/";
+  const [{initializeApp},A,F]=await Promise.all([import(G+"firebase-app.js"),import(G+"firebase-auth.js"),import(G+"firebase-firestore.js")]);
+  const app=initializeApp(CFG),auth=A.getAuth(app),db=F.getFirestore(app);
+  const KEYS=["botty-name","botty-notes","botty-learned","botty-brain","botty-unlocked"];
+  let uid=null,timer=null;
+  const rd=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}};
+  const wr=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+  const union=(a,b)=>{const seen=new Set(),out=[];[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(x=>{const j=JSON.stringify(x);if(!seen.has(j)){seen.add(j);out.push(x)}});return out};
+  async function push(){
+    if(!uid)return;const d={updated:F.serverTimestamp()};
+    KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)d[k]=v});
+    await F.setDoc(F.doc(db,"users",uid),d,{merge:true});
+  }
+  async function pull(){
+    const snap=await F.getDoc(F.doc(db,"users",uid)),c=snap.exists()?snap.data():{};
+    const cl=k=>{try{return JSON.parse(c[k])}catch(e){return null}};
+    const brain=union(cl("botty-brain"),rd("botty-brain")).slice(-600),learned=union(cl("botty-learned"),rd("botty-learned")).slice(-100),notes=union(cl("botty-notes"),rd("botty-notes"));
+    const name=rd("botty-name")||cl("botty-name"),unl=!!(cl("botty-unlocked")||rd("botty-unlocked"));
+    wr("botty-brain",brain);wr("botty-learned",learned);wr("botty-notes",notes);if(name)wr("botty-name",name);if(unl)wr("botty-unlocked",true);
+    window.BR=brain;window.learned=learned;if(window.S){window.S.notes=notes;if(name)window.S.name=name}
+    window.brain();await push();
+  }
+  window.cloudDirty=()=>{if(!uid)return;clearTimeout(timer);timer=setTimeout(()=>push().catch(()=>{}),2500)};
+  A.onAuthStateChanged(auth,u=>{
+    uid=u?u.uid:null;
+    btn.textContent=u?(u.displayName||u.email||"?")[0].toUpperCase():"👤";
+    btn.title=u?"Logged in as "+(u.email||u.displayName):"Log in";
+    if(u)pull().catch(()=>window.later("I couldn’t sync your brain just now. I’ll keep trying as you chat."));
+  });
+  const em=document.getElementById("lem"),pw=document.getElementById("lpw"),msg=document.getElementById("lmsg");
+  const err=e=>({"auth/invalid-credential":"Wrong email or password.","auth/email-already-in-use":"That email already has an account. Try logging in.","auth/weak-password":"Password needs at least 6 characters.","auth/invalid-email":"That email doesn’t look right.","auth/popup-closed-by-user":"Sign-in was closed.","auth/too-many-requests":"Too many tries. Wait a bit."}[e.code]||"Something went wrong ("+(e.code||e.message)+").");
+  const run=async f=>{msg.textContent="…";try{await f();dlg.close();window.later("✅ You’re logged in. Your brain now saves to your account.")}catch(e){msg.textContent=err(e)}};
+  document.getElementById("lin").onclick=()=>run(()=>A.signInWithEmailAndPassword(auth,em.value.trim(),pw.value));
+  document.getElementById("lup").onclick=()=>run(()=>A.createUserWithEmailAndPassword(auth,em.value.trim(),pw.value));
+  document.getElementById("lgo").onclick=()=>run(()=>A.signInWithPopup(auth,new A.GoogleAuthProvider()));
+  document.getElementById("lfg").onclick=async()=>{try{await A.sendPasswordResetEmail(auth,em.value.trim());msg.textContent="Reset email sent (check spam)."}catch(e){msg.textContent=err(e)}};
+  document.getElementById("lx").onclick=()=>dlg.close();
+  btn.onclick=()=>{
+    if(auth.currentUser){
+      if(confirm("Log out of "+(auth.currentUser.email||"your account")+"? Your brain stays saved in your account, and this browser’s copy is cleared."))
+        push().catch(()=>{}).then(()=>A.signOut(auth)).then(()=>{KEYS.forEach(k=>localStorage.removeItem(k));location.reload()});
+    }else{msg.textContent="";dlg.showModal()}
+  };
+}catch(e){btn.onclick=()=>window.later("Login couldn’t load (are you offline?).")}
+</script>
+</body>
+</html>
