@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Botty – offline chatbot</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#77756e;--me:#3b5bdb;--meText:#fff;--bot:#ecebe5;--line:#e0ded6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141413;--card:#1e1e1c;--text:#ecebe5;--muted:#8d8b83;--me:#5c7cfa;--bot:#2a2a27;--line:#33332f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141413;--card:#1e1e1c;--text:#ecebe5;--muted:#8d8b83;--me:#5c7cfa;--bot:#2a2a27;--line:#33332f;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center}
+.app{width:100%;max-width:560px;height:100%;display:flex;flex-direction:column;background:var(--card)}
+header{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:600}
+header small{display:block;color:var(--muted);font-weight:400;font-size:12px}
+#log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:82%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
+.bot{background:var(--bot);align-self:flex-start;border-bottom-left-radius:4px}
+.me{background:var(--me);color:var(--meText);align-self:flex-end;border-bottom-right-radius:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 8px}
+.chips button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:99px;padding:6px 12px;font-size:13px}
+.helper{align-self:flex-start;max-width:88%;border:1.5px dashed var(--me);color:var(--muted);border-radius:12px;padding:8px 12px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+input{flex:1;font-size:16px;padding:10px 14px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--text);outline:none}
+form button{border:0;background:var(--me);color:var(--meText);border-radius:99px;padding:0 18px;font-size:15px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>Botty<small>Botty + research helper Scout</small></header>
+<div id="log"></div>
+<div class="chips" id="chips"></div>
+<form id="f"><input id="in" placeholder="Say something…" autocomplete="off"><button>Send</button></form>
+</div>
+<script>
+var log=document.getElementById("log"),inp=document.getElementById("in");
+var S={name:null,count:0};
+var pick=function(a){return a[Math.floor(Math.random()*a.length)]};
+var jokes=["I told my computer I needed a break. Now it won’t stop sending me Kit-Kat ads.","Why do programmers prefer dark mode? Because light attracts bugs.","There are 10 kinds of people: those who understand binary and those who don’t.","My code has no bugs. It just develops random features."];
+var facts=["Honey never spoils. Edible honey has been found in ancient tombs.","Octopuses have three hearts.","A day on Venus is longer than its year.","Bananas are berries, but strawberries aren’t."];
+
+// Each rule: [regex, reply (string | array | function(match))]
+var rules=[
+[/^(hi|hey|hello|yo|sup|hola)\b/i,function(){return S.name?pick(["Hey "+S.name+"!","Yo "+S.name+", what’s up?"]):pick(["Hey! What’s your name?","Yo! I’m Botty. Who are you?"])}],
+[/my name is (\w+)|i am called (\w+)|call me (\w+)/i,function(m){S.name=cap(m[1]||m[2]||m[3]);return "Nice to meet you, "+S.name+"!"}],
+[/i(?:’|')?m (\w+)$/i,function(m){if(/^(good|fine|great|bad|sad|tired|bored|ok|okay|happy|hungry)$/i.test(m[1]))return mood(m[1].toLowerCase());S.name=cap(m[1]);return "Nice to meet you, "+S.name+"!"}],
+[/what(?:’|')?s my name|who am i|do you know my name/i,function(){return S.name?"You’re "+S.name+".":"You haven’t told me yet. What should I call you?"}],
+[/how are you|how(?:’|')?s it going|how you doing/i,["Doing great for a pile of JavaScript. You?","Pretty good! No servers were harmed today. You?"]],
+[/\b(good|great|fine|happy|awesome)\b/i,["Love that!","Nice, glad to hear it."]],
+[/\b(sad|tired|bad|stressed|bored|upset)\b/i,function(m){return mood(m[1].toLowerCase())}],
+[/who are you|what are you|your name/i,"I’m Botty, a rule-based chatbot. I match patterns in what you type, so no AI model and no internet needed."],
+[/who (made|built|created) you/i,"You asked someone to build me, and a pile of regexes did the rest."],
+[/how do you work|are you (ai|real|smart)/i,"I’m a list of patterns and replies. If your message matches one, I answer. If not, I bluff. Not real AI, but it’s fast and it works offline."],
+[/joke|funny|make me laugh/i,function(){return pick(jokes)}],
+[/\bfacts?\b|tell me something/i,function(){return pick(facts)}],
+[/\btime\b/i,function(){return "It’s "+new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+"."}],
+[/\b(date|today)\b|day is it/i,function(){return "Today is "+new Date().toLocaleDateString([], {weekday:"long",month:"long",day:"numeric"})+"."}],
+[/flip a coin|coin flip/i,function(){return pick(["Heads.","Tails."])}],
+[/roll (a )?(die|dice)/i,function(){return "You rolled a "+(1+Math.floor(Math.random()*6))+"."}],
+[/(-?\d+(?:\.\d+)?)\s*([+\-*x\/×÷])\s*(-?\d+(?:\.\d+)?)/i,function(m){var a=+m[1],b=+m[3],o=m[2],r;if(o=="+")r=a+b;else if(o=="-")r=a-b;else if(o=="/"||o=="÷")r=b?a/b:"nope, can’t divide by zero";else r=a*b;return "That’s "+r+"."}],
+[/thank|thx|ty\b/i,["Anytime!","No problem."]],
+[/\bhelp\b|what can you do/i,"Try: tell me a joke, a fun fact, the time, flip a coin, roll a die, or a quick sum like 12 * 7. Tell me your name and I’ll remember it for this chat."],
+[/love you|you(?:’|')?re (great|cool|awesome)/i,"Aw, you’re making my regexes blush."],
+[/\b(stupid|dumb|useless)\b/i,"Fair. I’m a few dozen patterns in a trench coat. Try “help” to see what I do well."],
+[/bye|goodbye|see ya|cya|gtg/i,function(){return "Later"+(S.name?", "+S.name:"")+"!"}],
+[/^(yes|yeah|yep|sure)$/i,["Cool.","Alright!"]],
+[/^(no|nope|nah)$/i,["Fair enough.","Okay, no worries."]]
+];
+var fallbacks=["Tell me more.","Hmm, I don’t have a pattern for that yet. Try “help”.","Interesting. Go on.","I didn’t quite catch that, but I’m listening."];
+
+function mood(w){return /sad|tired|bad|stressed|upset|bored/.test(w)?pick(["Sorry to hear that. Want a joke to help?","That’s rough. Want a fun fact or a joke?"]):"Nice!"}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase()}
+
+function reply(t){
+  S.count++;
+  for(var i=0;i<rules.length;i++){
+    var m=t.match(rules[i][0]);
+    if(m){var r=rules[i][1];return typeof r=="function"?r(m):Array.isArray(r)?pick(r):r}
+  }
+  return null;
+}
+function add(txt,who){
+  var d=document.createElement("div");d.className="m "+who;d.textContent=txt;log.appendChild(d);log.scrollTop=log.scrollHeight;return d;
+}
+function send(t){
+  t=t.trim();if(!t)return;
+  add(t,'me');
+  if(S.teach){
+    if(/^(no|nah|nope|skip|cancel)$/i.test(t)){S.teach=null;return later('No worries, I’ll stay clueless.')}
+    learned.push([S.teach,t]);try{localStorage.setItem('botty-learned',JSON.stringify(learned))}catch(x){}
+    S.teach=null;return later('Got it! Scout filed that away. Ask me again anytime.');
+  }
+  var r=reply(t);
+  if(r!==null)return later(r);
+  consult(t);
+}
+var learned=[];try{learned=JSON.parse(localStorage.getItem('botty-learned')||'[]')}catch(e){}
+var KB=[
+['black hole','A black hole is a region of space where gravity is so strong that nothing, not even light, can escape. Many form when massive stars collapse.'],
+['sun star','The Sun is a star at the center of our solar system. It’s about 4.6 billion years old and makes energy by fusing hydrogen into helium.'],
+['moon','The Moon is Earth’s only natural satellite. It’s about a quarter of Earth’s width and causes ocean tides.'],
+['gravity','Gravity is the force that pulls objects with mass toward each other. It keeps planets in orbit and us on the ground.'],
+['photosynthesis plant','Photosynthesis is how plants turn sunlight, water and carbon dioxide into sugar and oxygen.'],
+['dna gene genetics','DNA is the molecule that carries genetic instructions in living things. It’s shaped like a twisted ladder, a double helix.'],
+['internet web','The internet is a global network of connected computers. The web is the part of it you browse with links and pages.'],
+['javascript js','JavaScript is the programming language of the web. It runs in browsers and makes pages interactive.'],
+['python','Python is a popular programming language known for readable code. It’s used for data science, automation and websites.'],
+['html css','HTML structures web pages and CSS styles them. Together with JavaScript they power most websites.'],
+['artificial intelligence ai machine learning','AI is software that does tasks that normally need human intelligence, like understanding language or recognizing images. Machine learning trains it from examples.'],
+['neural network','A neural network is a model made of layers of simple connected units that learn patterns from data, loosely inspired by brains.'],
+['volcano lava eruption','A volcano is an opening in Earth’s crust where molten rock, ash and gas escape. Magma is called lava once it reaches the surface.'],
+['ocean sea','Oceans cover about 71 percent of Earth’s surface and hold roughly 97 percent of its water.'],
+['earthquake','Earthquakes happen when tectonic plates suddenly slip along faults and release energy as seismic waves.'],
+['dinosaur','Dinosaurs ruled Earth for about 165 million years until an asteroid impact roughly 66 million years ago. Birds are their living descendants.'],
+['pyramid egypt','The Egyptian pyramids were tombs for pharaohs. The Great Pyramid of Giza was built around 2560 BC.'],
+['chess','Chess is a two-player strategy board game on 64 squares. The goal is to checkmate the opponent’s king.'],
+['coffee','Coffee comes from roasted seeds of the coffee plant. Its caffeine blocks adenosine, a chemical that makes you feel sleepy.'],
+['pizza','Pizza started in Naples, Italy. The classic Margherita has tomato, mozzarella and basil.'],
+['music sound','Sound is vibrations traveling through air. Music organizes those vibrations into rhythm, melody and harmony.'],
+['democracy government','Democracy is a system where citizens choose leaders or laws, usually by voting.'],
+['money currency','Money is a shared agreement that lets people trade goods and services without bartering.'],
+['climate weather','Weather is what the atmosphere does day to day. Climate is the long-term average pattern.'],
+['atom molecule','Atoms are the tiny building blocks of matter. When atoms bond they form molecules, like H2O.'],
+['electricity','Electricity is the flow of charged particles, usually electrons, through a material like a wire.'],
+['cat','Cats are small carnivorous mammals domesticated about 10,000 years ago. They sleep around 12 to 16 hours a day.'],
+['dog','Dogs were the first domesticated animal, descended from wolves over 15,000 years ago.'],
+['brain','The human brain has about 86 billion neurons and uses roughly 20 percent of the body’s energy.'],
+['sleep dream','Sleep lets the brain clear waste and store memories. Most vivid dreams happen in REM sleep.'],
+['bitcoin crypto blockchain','Bitcoin is a digital currency tracked on a blockchain, a shared ledger no single party controls.']
+];
+var STOP='a an the is are was were what whats who whom why how when where do does did you your me my i it of to in on for about tell explain define mean means meaning please can could would know like with and or be this that there them'.split(' ');
+function stem(w){return w.replace(/(ing|ed|es|s)$/,'')}
+function toks(s){return s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(function(w){return w.length>1&&STOP.indexOf(w)<0}).map(stem)}
+function research(q){
+  var k=toks(q),all=KB.concat(learned),best=null,bs=0;
+  all.forEach(function(e){
+    var kt=toks(e[0]),tt=toks(e[1]),s=0;
+    k.forEach(function(w){if(kt.indexOf(w)>-1)s+=3;else if(tt.indexOf(w)>-1)s+=1});
+    if(s>bs){bs=s;best=e}
+  });
+  return {k:k,n:all.length,best:best,score:bs,conf:Math.min(100,Math.round(bs/Math.max(1,k.length*3)*100))};
+}
+function later(txt){var d=add('…','bot');setTimeout(function(){d.textContent=txt;log.scrollTop=log.scrollHeight},350+Math.random()*450)}
+function step(txt,ms,d,cb){setTimeout(function(){d.textContent+='\n'+txt;log.scrollTop=log.scrollHeight;if(cb)cb()},ms)}
+function consultOffline(t){
+  add('Hmm, I don’t know that one. Let me ask Scout…','bot');
+  var h=add('🔎 Scout: on it.','helper'),r=research(t),ok=r.score>=2,topic=r.k.join(' ')||t;
+  step('Keywords: '+(r.k.join(', ')||'none'),700,h);
+  step('Scanning '+r.n+' sources…',1400,h);
+  step(ok?'Best match: “'+r.best[0]+'” ('+r.conf+'% sure)':'No good match found.',2200,h,function(){
+    setTimeout(function(){
+      if(ok)add(pick(['Scout came back with this: ','Okay, Scout says: ','Turns out: '])+r.best[1],'bot');
+      else{S.teach=topic;add('Scout found nothing on “'+topic+'”. Want to teach me? Type what it is (or “no”).','bot')}
+      log.scrollTop=log.scrollHeight;
+    },500);
+  });
+}
+function rawk(s){return s.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(function(w){return w.length>1&&STOP.indexOf(w)<0})}
+function wait(ms){return new Promise(function(r){setTimeout(r,ms)})}
+function wiki(q){
+  var c=new AbortController(),tm=setTimeout(function(){c.abort()},6000);
+  return fetch('https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&prop=extracts&exintro=1&explaintext=1&exsentences=3&gsrsearch='+encodeURIComponent(q),{signal:c.signal})
+  .then(function(r){clearTimeout(tm);return r.json()})
+  .then(function(j){var p=j.query&&j.query.pages;if(!p)return null;var x=p[Object.keys(p)[0]];return x&&x.extract?{title:x.title,text:x.extract}:null});
+}
+async function consult(t){
+  add('Hmm, I don’t know that one. Let me ask Scout…','bot');
+  var h=add('🔎 Scout: on it.','helper'),r=research(t),q=rawk(t).join(' ')||t,ans=null,src='';
+  var line=function(x){h.textContent+='\n'+x;log.scrollTop=log.scrollHeight};
+  await wait(600);line('Search terms: '+q);line('🌐 Trying the internet (Wikipedia)…');
+  try{var w=await wiki(q);if(w){ans=w.text;src='Wikipedia: '+w.title;line('✔ Found “'+w.title+'”')}else line('✘ Nothing on Wikipedia')}
+  catch(e){line('✘ Internet blocked here (works when the file runs on your own device)')}
+  if(!ans&&r.score>=2){ans=r.best[1];src='built-in library';line('📚 Library match: “'+r.best[0]+'” ('+r.conf+'% sure)')}
+  await wait(500);
+  if(ans){
+    add(pick(['Scout came back with this: ','Okay, Scout says: ','Turns out: '])+ans+'\n('+src+')','bot');
+    if(src!=='built-in library'){learned.push([q,ans]);try{localStorage.setItem('botty-learned',JSON.stringify(learned))}catch(e){}}
+  }else{S.teach=q;add('Scout found nothing on “'+q+'”. Want to teach me? Type what it is (or “no”).','bot')}
+  log.scrollTop=log.scrollHeight;
+}
+document.getElementById("f").onsubmit=function(e){e.preventDefault();var v=inp.value;inp.value="";send(v)};
+["Tell me a joke","Fun fact","Roll a die","12 * 7","Help"].forEach(function(c){
+  var b=document.createElement("button");b.type="button";b.textContent=c;b.onclick=function(){send(c)};document.getElementById("chips").appendChild(b);
+});
+add("Hey! I’m Botty, a chatbot that runs with no API. What’s your name?","bot");
+</script>
+</body>
+</html>
